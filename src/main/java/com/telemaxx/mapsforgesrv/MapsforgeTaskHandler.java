@@ -136,19 +136,13 @@ public class MapsforgeTaskHandler {
 			renderLabels = false;
 			cacheLabels = false;
 			colorLookupTable = new int[256];
-			int pixelValue,gray,dist,alpha;
-			int range = (int)(30*mapsforgeTaskConfig.getHillShadingMagnitude()); // gray value range
-			if (range > 120) range = 120;	// maximum value range is 120
-			int base = 248-range; // obviously base gray value depending on hillshading magnitude
+			int pixelValue,gray,alpha;
 			int index = 256;
+			// Mapsforge >= 0.22.0: Mapsforge hillshading bitmap changed
 			while (index-- > 0) {
 				gray = index;
-				dist = gray-base;				// distance to base gray value
-				alpha = Math.abs(dist) * 2;		// alpha value is 2 * abs(distance) to base gray value
-				if (alpha > 255) alpha = 255;	// limit alpha to fully opaque
-				pixelValue = alpha << 24;		// black pixel with variable alpha transparency
-				if (dist > 0)					// present gray value lighter than base gray:
-					pixelValue |= 0x00ffffff;	// white pixel with variable alpha transparency
+				alpha = 255-gray;
+				pixelValue = alpha << 24;
 				colorLookupTable[index] = pixelValue;
 			}
 		} else {
@@ -202,7 +196,9 @@ public class MapsforgeTaskHandler {
 			tileSource.applyConfiguration(true); // true for allow parallel
 
 			hillsRenderConfig = new HillsRenderConfig(tileSource);
-			hillsRenderConfig.setMaginuteScaleFactor((float) mapsforgeTaskConfig.getHillShadingMagnitude());
+			// Mapsforge >= 0.22.0: RenderThemeHandler.java raised default magnitude from 64 to 128
+			// For look-and-feel compatibility, specified MagnitudeScaleFactor must be divided by 2
+			hillsRenderConfig.setMagnitudeScaleFactor((float) (0.5*mapsforgeTaskConfig.getHillShadingMagnitude()));
 			hillsRenderConfig.indexOnThread();
 		}
 
@@ -421,11 +417,7 @@ public class MapsforgeTaskHandler {
 				int[] newPixelArray = newDataBuffer.getData();
 				while (pixelCount-- > 0) {
 					pixelValue = pixelArray[pixelCount];
-					if (pixelValue == 0xffffffff) { // 'nodata' hillshading value
-						newPixelArray[pixelCount] = 0x00000000; // fully transparent pixel
-					} else { // get gray value of pixel from blue value of pixel
-						newPixelArray[pixelCount] = colorLookupTable[pixelValue & 0xff];
-					}
+					newPixelArray[pixelCount] = colorLookupTable[pixelValue & 0xff];
 				}
 				image = newImage; // return transparent overlay image instead of original image
 			} else if (colorLookupTable != null) { // apply gamma correction and/or contrast-stretching
@@ -517,6 +509,8 @@ public class MapsforgeTaskHandler {
 	private enum MyInternalRenderTheme implements XmlRenderTheme {
 		DEFAULT("/assets/mapsforge/default.xml"),
 		OSMARENDER("/assets/mapsforge/osmarender.xml"),
+		MOTORIDER("/assets/mapsforge/motorider.xml"),
+		MOTORIDER_DARK("/assets/mapsforge/motorider-dark.xml"),
 		HILLSHADING("/assets/mapsforgesrv/hillshading.xml");
 		private XmlRenderThemeMenuCallback menuCallback;
 		private final String path;
