@@ -27,12 +27,17 @@ import org.mapsforge.core.model.Tile;
 import org.mapsforge.map.awt.graphics.AwtGraphicFactory;
 import org.mapsforge.map.datastore.MultiMapDataStore;
 import org.mapsforge.map.layer.cache.TileCache;
+import org.mapsforge.map.layer.hills.AClasyHillShading.ClasyParams;
+import org.mapsforge.map.layer.hills.AClasyHillShading.ClasyParams.Builder;
 import org.mapsforge.map.layer.hills.DemFolderFS;
 import org.mapsforge.map.layer.hills.DiffuseLightShadingAlgorithm;
+import org.mapsforge.map.layer.hills.HiResStandardClasyHillShading;
 import org.mapsforge.map.layer.hills.HillsRenderConfig;
 import org.mapsforge.map.layer.hills.MemoryCachingHgtReaderTileSource;
 import org.mapsforge.map.layer.hills.ShadingAlgorithm;
+import org.mapsforge.map.layer.hills.SimpleClasyHillShading;
 import org.mapsforge.map.layer.hills.SimpleShadingAlgorithm;
+import org.mapsforge.map.layer.hills.StandardClasyHillShading;
 import org.mapsforge.map.layer.labels.TileBasedLabelStore;
 import org.mapsforge.map.layer.renderer.DatabaseRenderer;
 import org.mapsforge.map.layer.renderer.RendererJob;
@@ -61,7 +66,6 @@ public class MapsforgeTaskHandler {
 	private final TileBasedLabelStore labelStore;
 	private final TileCache tileCache;
 	private final MultiMapDataStore multiMapDataStore;
-	private final DemFolderFS demFolder;
 	private final File themeFile;
 	private final String themeFileStyle;
 	private final boolean renderLabels;
@@ -72,7 +76,6 @@ public class MapsforgeTaskHandler {
 	private HillsRenderConfig hillsRenderConfig = null;
 	private XmlRenderTheme xmlRenderTheme;
 	private RenderThemeFuture renderThemeFuture;
-	private ShadingAlgorithm shadingAlgorithm = null;
 	private int[] colorLookupTable = null;
 	private String name;
 	private Map<String, DatabaseRenderer> databaseRenderer = null;
@@ -94,12 +97,14 @@ public class MapsforgeTaskHandler {
 		this.mapsforgeConfig = mapsforgeHandler.getMapsforgeConfig();
 		this.mapsforgeTaskConfig = mapsforgeTaskConfig;
 
+		int mapFilesSize = mapsforgeTaskConfig.getMapFiles().size();
+		String hillShadingAlgorithm = mapsforgeTaskConfig.getHillShadingAlgorithm();
+		File demFolder = mapsforgeTaskConfig.getDemFolder();
+
 		logger.info("------------------- MAPS INFO --------------------");
 		multiMapDataStore = new MultiMapDataStore(MultiMapDataStore.DataPolicy.RETURN_ALL);
-		if (mapsforgeTaskConfig.getMapFiles().size() == 0) {
-			if (mapsforgeTaskConfig.getHillShadingAlgorithm() != null && mapsforgeTaskConfig.getDemFolder() != null) {
-				hillShadingOverlay = true;
-			}
+		if (mapFilesSize == 0) {
+			if (hillShadingAlgorithm != null && demFolder != null) hillShadingOverlay = true;
 		} else {
 			mapsforgeTaskConfig.getMapFiles().forEach(mapFile -> {
 				MapFile map = new MapFile(mapFile, mapsforgeTaskConfig.getPreferredLanguage());
@@ -118,14 +123,12 @@ public class MapsforgeTaskHandler {
 			FileChannel mapFileChannel = FileChannel.open(MapsforgeConfig.worldMapPath, StandardOpenOption.READ);
 			MapFile map = new MapFile(mapFileChannel);
 			logger.info("'(built-in)" + System.getProperty("file.separator") + "world.map'");
-			if (mapsforgeTaskConfig.getMapFiles().size() > 0) map.restrictToZoomRange((byte)0, (byte)9);
+			if (mapFilesSize > 0) map.restrictToZoomRange((byte)0, (byte)9);
 			multiMapDataStore.addMapDataStore(map, true, true);
 		}
-		if(mapsforgeTaskConfig.getDemFolder() != null) {
-			demFolder = new DemFolderFS(mapsforgeTaskConfig.getDemFolder());
-		} else {
-			demFolder = null;
-		}
+
+		DemFolderFS demFolderFS = null;
+		if (demFolder != null) demFolderFS = new DemFolderFS(demFolder);
 
 		if (hillShadingOverlay) {
 			logger.info("No map -> hillshading overlay with alpha transparency only!");
@@ -178,20 +181,44 @@ public class MapsforgeTaskHandler {
 		displayModel = new DisplayModel();
 		displayModel.setUserScaleFactor(mapsforgeTaskConfig.getUserScale());
 
-		if (mapsforgeTaskConfig.getHillShadingAlgorithm() != null && mapsforgeTaskConfig.getDemFolder() != null) { // hillshading
-			if (mapsforgeTaskConfig.getHillShadingAlgorithm().equals("simple")) {
+		if (hillShadingAlgorithm != null && demFolder != null) { // hillshading
+			ShadingAlgorithm shadingAlgorithm = null;
+			if (hillShadingAlgorithm.equals("simple")) {
 				shadingAlgorithm = new SimpleShadingAlgorithm(mapsforgeTaskConfig.getHillShadingArguments()[0],
 						mapsforgeTaskConfig.getHillShadingArguments()[1]);
-			} else {
+			} else if (hillShadingAlgorithm.equals("diffuselight")) {
 				shadingAlgorithm = new DiffuseLightShadingAlgorithm(
 						(float) mapsforgeTaskConfig.getHillShadingArguments()[0]);
+			} else if (hillShadingAlgorithm.equals("stdasy") ||
+					hillShadingAlgorithm.equals("hiresasy") ||
+					hillShadingAlgorithm.equals("simplasy")) {
+				Builder clasyBuilder = new ClasyParams.Builder();
+				clasyBuilder.setMinSlope((float) mapsforgeTaskConfig.getHillShadingArguments()[1]);
+				clasyBuilder.setMaxSlope((float) mapsforgeTaskConfig.getHillShadingArguments()[2]);
+				clasyBuilder.setAsymmetryFactor((float) mapsforgeTaskConfig.getHillShadingArguments()[0]);
+				clasyBuilder.setReadingThreadsCount((int) mapsforgeTaskConfig.getHillShadingArguments()[3]);
+				clasyBuilder.setComputingThreadsCount((int) mapsforgeTaskConfig.getHillShadingArguments()[4]);
+				clasyBuilder.setHighQuality(mapsforgeTaskConfig.getHillShadingArguments()[5] == 1);
+				switch (hillShadingAlgorithm) {
+					case "hiresasy": 
+						shadingAlgorithm = new HiResStandardClasyHillShading(clasyBuilder.build());
+						break;
+					case "stdasy": 
+						shadingAlgorithm = new StandardClasyHillShading(clasyBuilder.build()); 
+						break;
+					case "simplasy": 
+						shadingAlgorithm = new SimpleClasyHillShading(clasyBuilder.build()); 
+						break;
+				}
+			} else {
+				throw new Exception("Unknown HillShadingAlgorithm '"+hillShadingAlgorithm+"'");
 			}
 
 			MemoryCachingHgtReaderTileSource tileSource = new MemoryCachingHgtReaderTileSource(
-					demFolder, shadingAlgorithm, mapsforgeHandler.getGraphicFactory());
+					demFolderFS, shadingAlgorithm, mapsforgeHandler.getGraphicFactory());
 			tileSource.setEnableInterpolationOverlap(MapsforgeConfig.HILLSHADING_INTERPOLATION_OVERLAP);
 			tileSource.setMainCacheSize(MapsforgeConfig.HILLSHADING_CACHE);
-			if(MapsforgeConfig.HILLSHADING_INTERPOLATION_OVERLAP)
+			if (MapsforgeConfig.HILLSHADING_INTERPOLATION_OVERLAP)
 				tileSource.setNeighborCacheSize(MapsforgeConfig.HILLSHADING_NEIGHBOR_CACHE);
 			tileSource.applyConfiguration(true); // true for allow parallel
 
@@ -360,8 +387,7 @@ public class MapsforgeTaskHandler {
 		int requestedTileRenderSize = MapsforgeConfig.DEFAULT_TILE_RENDERSIZE;
 		try {
 			String tmp = request.getParameter("tileRenderSize"); //$NON-NLS-1$
-			if (tmp != null)
-				requestedTileRenderSize = Integer.parseInt(tmp);
+			if (tmp != null) requestedTileRenderSize = Integer.parseInt(tmp);
 		} catch (Exception e) {
 			throw new ServletException("Failed to parse \"tileRenderSize\" property: " + e.getMessage(), e); //$NON-NLS-1$
 		}
@@ -372,8 +398,7 @@ public class MapsforgeTaskHandler {
 			boolean enable_hs = true;
 			try {
 				String tmp = request.getParameter("hillshading"); //$NON-NLS-1$
-				if (tmp != null)
-					enable_hs = Integer.parseInt(request.getParameter("hillshading")) != 0; //$NON-NLS-1$
+				if (tmp != null) enable_hs = Integer.parseInt(tmp) != 0; //$NON-NLS-1$
 			} catch (Exception e) {
 				throw new ServletException("Failed to parse \"hillshading\" property: " + e.getMessage(), e); //$NON-NLS-1$
 			}
