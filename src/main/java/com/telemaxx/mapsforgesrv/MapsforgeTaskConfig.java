@@ -47,7 +47,7 @@ public class MapsforgeTaskConfig extends PropertiesParser{
 		String configValue = "themefile";
 		String configString = retrieveConfigValue(configValue);
 		String msgHeader = "Theme";
-		String internalThemes[] = {"DEFAULT", "OSMARENDER"};
+		String internalThemes[] = {"DEFAULT", "OSMARENDER", "MOTORIDER", "MOTORIDER_DARK"};
 		if (configString == null) {
 			themeFile = new File("OSMARENDER");
 			logger.info(parsePadMsg(msgHeader + " " + FILE) + ": default [OSMARENDER]"); //$NON-NLS-1$
