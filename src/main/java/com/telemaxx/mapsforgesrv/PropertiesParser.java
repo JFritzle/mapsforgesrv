@@ -41,6 +41,8 @@ public abstract class PropertiesParser {
 	public final static int 		HILLSHADING_CACHE = 128; // default is 4
 	public final static int 		HILLSHADING_NEIGHBOR_CACHE= 8; // default is 4
 
+	public final static int			AVAILABLE_PROCESSORS = Runtime.getRuntime().availableProcessors();
+
 	/******************
 	 * DEFAULT VALUES *
 	 ******************/
@@ -70,7 +72,7 @@ public abstract class PropertiesParser {
 	// MapsforgeTaskConfig.hillShadingArguments
 	public final static double[] 	DEFAULT_HILLSHADING_SIMPLE = { 0.1, 0.666 };
 	public final static	double 		DEFAULT_HILLSHADING_DIFFUSELIGHT = 50;
-	public final static	double[] 	DEFAULT_HILLSHADING_CLASY = { 0.5, 0, 80, 8, 8, 1 };
+	public final static	double[] 	DEFAULT_HILLSHADING_CLASY = { 0.5, 0, 80, Math.max(1,AVAILABLE_PROCESSORS/3), AVAILABLE_PROCESSORS, 1 };
 	// MapsforgeTaskConfig.hillShadingMagnitude
 	protected final static double 	DEFAULT_HILLSHADING_MAGNITUDE = 1.;
 
