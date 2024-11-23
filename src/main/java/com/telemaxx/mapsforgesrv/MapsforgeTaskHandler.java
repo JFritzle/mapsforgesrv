@@ -141,7 +141,7 @@ public class MapsforgeTaskHandler {
 			colorLookupTable = new int[256];
 			int pixelValue,gray,alpha;
 			int index = 256;
-			// Mapsforge >= 0.22.0: Mapsforge hillshading bitmap changed
+			// Mapsforge >= 0.22.0: Mapsforge hillshading bitmap calculation changed
 			while (index-- > 0) {
 				gray = index;
 				alpha = 255-gray;
@@ -224,7 +224,7 @@ public class MapsforgeTaskHandler {
 
 			hillsRenderConfig = new HillsRenderConfig(tileSource);
 			// Mapsforge >= 0.22.0: RenderThemeHandler.java raised default magnitude from 64 to 128
-			// For look-and-feel compatibility, specified MagnitudeScaleFactor must be divided by 2
+			// For look-and-feel backward compatibility, specified MagnitudeScaleFactor must be divided by 2
 			hillsRenderConfig.setMagnitudeScaleFactor((float) (0.5*mapsforgeTaskConfig.getHillShadingMagnitude()));
 			hillsRenderConfig.indexOnThread();
 		}
@@ -442,7 +442,11 @@ public class MapsforgeTaskHandler {
 				int[] newPixelArray = newDataBuffer.getData();
 				while (pixelCount-- > 0) {
 					pixelValue = pixelArray[pixelCount];
-					newPixelArray[pixelCount] = colorLookupTable[pixelValue & 0xff];
+					if (pixelValue == 0xffffffff) { // 'nodata' hillshading value, cf. hillshading.xml file
+						newPixelArray[pixelCount] = 0x00000000; // fully transparent pixel
+					} else { // get gray value of pixel from blue value of pixel
+						newPixelArray[pixelCount] = colorLookupTable[pixelValue & 0xff];
+					}
 				}
 				image = newImage; // return transparent overlay image instead of original image
 			} else if (colorLookupTable != null) { // apply gamma correction and/or contrast-stretching
