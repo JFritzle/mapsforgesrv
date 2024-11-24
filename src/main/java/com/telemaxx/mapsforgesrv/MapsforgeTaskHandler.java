@@ -50,6 +50,7 @@ import org.mapsforge.map.rendertheme.XmlRenderThemeStyleLayer;
 import org.mapsforge.map.rendertheme.XmlRenderThemeStyleMenu;
 import org.mapsforge.map.rendertheme.XmlThemeResourceProvider;
 import org.mapsforge.map.rendertheme.rule.RenderThemeFuture;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -280,7 +281,7 @@ public class MapsforgeTaskHandler {
 		};
 
 		xmlRenderTheme = null;
-		for (MyInternalRenderTheme enumItem : new ArrayList<MyInternalRenderTheme>(EnumSet.allOf(MyInternalRenderTheme.class))) {
+		for (MyMapsforgeThemes enumItem : new ArrayList<MyMapsforgeThemes>(EnumSet.allOf(MyMapsforgeThemes.class))) {
 			if (enumItem.toString().equals(themeFile.getPath())) {
 				xmlRenderTheme = enumItem;	// Internal render theme
 				break;
@@ -532,10 +533,10 @@ public class MapsforgeTaskHandler {
 		}
 	}
 
-	// Enumeration of tile server's internal rendering themes
-	// (copied and extended from InternalRenderTheme enumeration)
+	// Enumeration of all tile server's internal rendering themes
+	// (copied and extended from org/mapsforge/map/rendertheme/internal/MapsforgeThemes)
 	// Using StreamRenderThemes throws exception when calling "updateRenderThemeFuture" within "handle"
-	private enum MyInternalRenderTheme implements XmlRenderTheme {
+	private enum MyMapsforgeThemes implements XmlRenderTheme {
 		DEFAULT("/assets/mapsforge/default.xml"),
 		OSMARENDER("/assets/mapsforge/osmarender.xml"),
 		MOTORIDER("/assets/mapsforge/motorider.xml"),
@@ -543,7 +544,7 @@ public class MapsforgeTaskHandler {
 		HILLSHADING("/assets/mapsforgesrv/hillshading.xml");
 		private XmlRenderThemeMenuCallback menuCallback;
 		private final String path;
-		MyInternalRenderTheme(String path) {
+		MyMapsforgeThemes(String path) {
 			this.path = path;
 		}
 		@Override
