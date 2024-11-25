@@ -443,11 +443,7 @@ public class MapsforgeTaskHandler {
 				int[] newPixelArray = newDataBuffer.getData();
 				while (pixelCount-- > 0) {
 					pixelValue = pixelArray[pixelCount];
-					if (pixelValue == 0xffffffff) { // 'nodata' hillshading value, cf. hillshading.xml file
-						newPixelArray[pixelCount] = 0x00000000; // fully transparent pixel
-					} else { // get gray value of pixel from blue value of pixel
-						newPixelArray[pixelCount] = colorLookupTable[pixelValue & 0xff];
-					}
+					newPixelArray[pixelCount] = colorLookupTable[pixelValue & 0xff];
 				}
 				image = newImage; // return transparent overlay image instead of original image
 			} else if (colorLookupTable != null) { // apply gamma correction and/or contrast-stretching
@@ -502,7 +498,7 @@ public class MapsforgeTaskHandler {
 	 * Display all styles contained in theme
 	 * Disable task if defined style does not exist
 	 */
-	protected void showStyleNames() throws Exception {
+	private void showStyleNames() throws Exception {
 		MapsforgeStyleParser mapStyleParser = new MapsforgeStyleParser();
 		InputStream inputStream = xmlRenderTheme.getRenderThemeAsStream();
 		List<Style> styles = mapStyleParser.readXML(inputStream);

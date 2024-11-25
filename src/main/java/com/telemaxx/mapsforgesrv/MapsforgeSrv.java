@@ -66,7 +66,7 @@
  *           Initial version (nono303)
  *           Fixes, improvements, extensions (JFritzle)
  * 0.21.3.1: Fixes, improvements, extensions (JFritzle)
- * 0.21.3.2: Updates "build.gradle" -> shrink JAR file size significantly (nono303)
+ * 0.21.4.0: Updates "build.gradle" -> shrink JAR file size significantly (nono303)
  * 0.22.0.0: Prepare for Mapsforge version 0.22.0 (JFritzle)
  *           New asymmetry hillshading (nono303)
  *           Adjust to changed Mapsforge hillshading requirements
