@@ -39,9 +39,9 @@ Server configuration file `server.poperties` recognizes the following parameters
 | `host` | IP address to listen on<br>Default: unset = listen on all interfaces
 | `port` | TCP port to listen on<br>Default: `8486`
 | `cache-control` | Browser cache TTL<br>Default: `0`
-| `terminate` | Accept terminate request<br>Default: `false`
+| `terminate` | Accept terminate request (from loopback addresses only!)<br>Default: `false`
 | `outofrange_tms` | URL pattern of an external TMS server<br>used to redirect for out-of-range tiles<br>e.g. https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png<br>Default: unset = no redirection
-| `requestlog-format` | Output format of logged server requests<br>Empty value suppresses request logging!<br>Default: `"%{client}a - %u %t '%r' %s %O '%{Referer}i' '%{User-Agent}i' '%C'"`<br>For description of format syntax see [here](https://javadoc.io/doc/org.eclipse.jetty/jetty-server/latest/org.eclipse.jetty.server/org/eclipse/jetty/server/CustomRequestLog.html).  
+| `requestlog-format` | Output format of logged server requests<br>Empty value suppresses request logging!<br>Default: `"From %{client}a Get %U%q Status %s Size %O bytes Time %{ms}T ms"`<br>For description of format syntax see [here](https://javadoc.io/doc/org.eclipse.jetty/jetty-server/latest/org.eclipse.jetty.server/org/eclipse/jetty/server/CustomRequestLog.html).  
 
 Task configuration files recognize the following parameters:
 
@@ -50,11 +50,11 @@ Task configuration files recognize the following parameters:
 | `mapfiles` | Comma-separated list of map file paths with file extension `.map`<br>Default: unset = built-in world map automatically used
 | `worldmap` | Append built-in world map to list `mapfiles` of map files<br>Default: `false`
 | `language` | Preferred language if supported by map file<br>(ISO 639-1 or ISO 639-2 if an ISO 639-1 code doesn't exist)<br>Default: unset = primary available map language used
-| `themefile` | Theme file path with file extension `.xml`<br>or built-in Mapsforge theme `DEFAULT` or `OSMARENDER`<br>used for rendering<br>Default: built-in Mapsforge theme `OSMARENDER`
+| `themefile` | Theme file path with file extension `.xml`<br>or one of built-in Mapsforge themes<br>`DEFAULT`, `OSMARENDER`, `MOTORIDER` or `MOTORIDER_DARK`<br>used for rendering<br>Default: built-in Mapsforge theme `OSMARENDER`
 | `style` | Theme file's style used for rendering<br>Default: unset =  theme file's built-in default style
 | `overlays` | Comma-separated list of style's overlays <br>to be enabled for rendering<br>Default: unset = style's overlays enabled by default
 | `demfolder` | Folder path containing DEM (Digital Elevation Model) data files<br>with file extension `.hgt` required by hillshading<br>Default: unset = no hillshading
-| `hillshading-algorithm` | Hillshading algorithm `simple` or `simple(linearity,scale)`<br>or `diffuselight` or `diffuselight(angle)` used for hillshading<br>Default: unset = no hillshading<br>Parameter defaults: linearity = 0.1, scale = 0.666, angle = 50.<br>Parameter ranges: 0. ≤ linearity ≤ 4., 0. ≤ scale, 0. ≤ angle ≤ 90.
+| `hillshading-algorithm` | One of hillshading algorithms used for hillshading<br>`simple(linearity,scale)`<br>`diffuselight(angle)`<br> `stdasy(asymmetryFactor,minSlope,maxSlope,readingThreadsCount,computingThreadsCount,highQuality)`<br>`simplasy(asymmetryFactor,minSlope,maxSlope,readingThreadsCount,computingThreadsCount,highQuality)`<br>`hiresasy(asymmetryFactor,minSlope,maxSlope,readingThreadsCount,computingThreadsCount,highQuality)`<br>Hillshading algorithm name without parentheses and parameters is valid too!<br>Default: unset = no hillshading<br>Parameter defaults:<br>linearity = 0.1, scale = 0.666, angle = 50.,<br>asymmetryFactor = 0.5, minSlope = 0, maxSlope = 80,<br>readingThreadsCount = max(1,AVAILABLE_PROCESSORS/3),<br>computingThreadsCount = AVAILABLE_PROCESSORS,<br>highQuality = true<br>Parameter ranges:<br>0. ≤ linearity ≤ 4., 0. ≤ scale, 0. ≤ angle ≤ 90.,<br>0. ≤ asymmetryFactor ≤ 1., 0 ≤ minSlope < maxSlope, minSlope < maxSlope ≤ 100,<br>readingThreadsCount ≥ 0, computingThreadsCount ≥ 0, highQuality = {false\|true}
 | `hillshading-magnitude` | Hillshading's gray value magnitude scaling, 0. ≤ value ≤ 4.<br>Value < 1. = brighter gray, value > 1. = darker gray<br>Default: `1.` = unscaled gray values
 | `contrast-stretch` | Contrast stretching of color value, 0 ≤ value ≤ 254 to increase<br>contrast by raising black level from 0 towards white level 255 <br>Default: `0` = no contrast stretching
 | `gamma-correction` | Gamma correction value > 0. for nonlinear luminance mapping<br>Default: `1.` = no gamma correction
