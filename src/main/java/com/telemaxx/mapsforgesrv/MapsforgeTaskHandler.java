@@ -441,8 +441,10 @@ public class MapsforgeTaskHandler {
 			renderThemeFuture = null;
 		} else if (neighbourLabels) {
 			// Text scaling is taken from the config here; a per-request "textScale" does not reach the labels.
-			createDatabaseRenderers(new NeighbourLabelStore(multiMapDataStore, renderThemeFuture, 1.0f,
-					displayModel, mapsforgeHandler.getGraphicFactory()), renderThemeFuture);
+			// The theme is read once, so the label store and the snapshot cannot get two different ones.
+			RenderThemeFuture theme = renderThemeFuture;
+			createDatabaseRenderers(new NeighbourLabelStore(multiMapDataStore, theme, 1.0f,
+					displayModel, mapsforgeHandler.getGraphicFactory()), theme);
 		}
 		return taskEnabled;
 }

@@ -30,10 +30,16 @@ public class NeighbourLabelStore extends MapDataStoreLabelStore {
 
 	@Override
 	public List<MapElementContainer> getVisibleItems(Tile upperLeft, Tile lowerRight) {
+		int max = Tile.getMaxTileNumber(upperLeft.zoomLevel);
+		if (max < 2) {
+			// A world of 1x1 or 2x2 tiles is narrower than a 3x3 neighbourhood: at zoom 1 the tiles
+			// above-left and below-right of (0,0) are both (1,1). The neighbourhood is the whole world.
+			return super.getVisibleItems(new Tile(0, 0, upperLeft.zoomLevel, upperLeft.tileSize),
+					new Tile(max, max, upperLeft.zoomLevel, upperLeft.tileSize));
+		}
 		if (upperLeft.tileX <= lowerRight.tileX && upperLeft.tileY <= lowerRight.tileY) {
 			return super.getVisibleItems(upperLeft, lowerRight);
 		}
-		int max = Tile.getMaxTileNumber(upperLeft.zoomLevel);
 		List<MapElementContainer> items = new ArrayList<>();
 		for (int[] xs : pieces(upperLeft.tileX, lowerRight.tileX, max)) {
 			for (int[] ys : pieces(upperLeft.tileY, lowerRight.tileY, max)) {
