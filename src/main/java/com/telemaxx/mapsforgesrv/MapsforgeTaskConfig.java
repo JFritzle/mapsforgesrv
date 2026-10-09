@@ -20,6 +20,7 @@ public class MapsforgeTaskConfig extends PropertiesParser{
 
 	private ArrayList<File> mapFiles = null;
 	private boolean appendWorldMap;
+	private boolean neighbourLabels;
 	private String preferredLanguage = null;
 	private File demFolder = null;
 	private File themeFile = null;
@@ -138,6 +139,7 @@ public class MapsforgeTaskConfig extends PropertiesParser{
 		parseResetError();
 		parseMapFiles();
 		appendWorldMap = parseBoolean(DEFAULT_APPENDWORLDMAP,"worldmap", "Append built-in world map");
+		neighbourLabels = parseBoolean(DEFAULT_NEIGHBOURLABELS, "neighbour-labels", "Labels from neighbour tiles");
 		preferredLanguage = parseString(null, "language", null, "Preferred map language"); //$NON-NLS-1$ //$NON-NLS-2$
 		parseThemeFile();
 		themeFileStyle = parseString(null, "style", null, "Theme style"); //$NON-NLS-1$ //$NON-NLS-2$
@@ -237,6 +239,10 @@ public class MapsforgeTaskConfig extends PropertiesParser{
 
 	public boolean getAppendWorldMap() {
 		return this.appendWorldMap;
+	}
+
+	public boolean getNeighbourLabels() {
+		return this.neighbourLabels;
 	}
 
 	public File getDemFolder() {
