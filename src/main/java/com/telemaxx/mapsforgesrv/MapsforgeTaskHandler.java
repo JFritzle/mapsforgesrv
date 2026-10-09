@@ -41,7 +41,6 @@ import org.mapsforge.map.layer.hills.SimpleClasyHillShading;
 import org.mapsforge.map.layer.hills.SimpleShadingAlgorithm;
 import org.mapsforge.map.layer.hills.StandardClasyHillShading;
 import org.mapsforge.map.layer.labels.LabelStore;
-import org.mapsforge.map.layer.labels.MapDataStoreLabelStore;
 import org.mapsforge.map.layer.labels.TileBasedLabelStore;
 import org.mapsforge.map.layer.renderer.DatabaseRenderer;
 import org.mapsforge.map.layer.renderer.RendererJob;
@@ -86,8 +85,19 @@ public class MapsforgeTaskHandler {
 	private RenderThemeFuture renderThemeFuture;
 	private int[] colorLookupTable = null;
 	private String taskName;
-	private volatile Map<String, DatabaseRenderer> databaseRenderer = null;
+	private volatile Rendering rendering = null;
 	private boolean neighbourLabels = false;
+
+	// The renderers and, with neighbour labels, the render theme their label store was built for.
+	// They are replaced together, so a request never pairs one theme with another theme's labels.
+	private static final class Rendering {
+		final Map<String, DatabaseRenderer> renderers;
+		final RenderThemeFuture labelTheme; // null: the request uses the current theme
+		Rendering(Map<String, DatabaseRenderer> renderers, RenderThemeFuture labelTheme) {
+			this.renderers = renderers;
+			this.labelTheme = labelTheme;
+		}
+	}
 
 	private MapsforgeHandler mapsforgeHandler;
 	private MapsforgeConfig mapsforgeConfig;
@@ -250,19 +260,19 @@ public class MapsforgeTaskHandler {
 		// The label store needs the render theme, so in this mode the renderers are created once the
 		// theme is ready (updateRenderThemeFuture).
 		neighbourLabels = mapsforgeTaskConfig.getNeighbourLabels() && !hillShadingOverlay;
-		if (!neighbourLabels) createDatabaseRenderers(labelStore);
+		if (!neighbourLabels) createDatabaseRenderers(labelStore, null);
 
 		updateRenderThemeFuture(false);
 	}
 
-	private void createDatabaseRenderers(LabelStore store) {
+	private void createDatabaseRenderers(LabelStore store, RenderThemeFuture labelTheme) {
 		Map<String, DatabaseRenderer> renderers = new HashMap<String, DatabaseRenderer>();
 		renderers.put("std", new DatabaseRenderer(multiMapDataStore, mapsforgeHandler.getGraphicFactory(), tileCache,
 				store, renderLabels, cacheLabels, null));
 		if (hillsRenderConfig != null)
 			renderers.put("hs", new DatabaseRenderer(multiMapDataStore, mapsforgeHandler.getGraphicFactory(), tileCache,
 					store, renderLabels, cacheLabels, hillsRenderConfig));
-		databaseRenderer = renderers;
+		rendering = new Rendering(renderers, labelTheme);
 	}
 
 	protected XmlRenderThemeMenuCallback menuCallBack = new XmlRenderThemeMenuCallback() {
@@ -431,8 +441,8 @@ public class MapsforgeTaskHandler {
 			renderThemeFuture = null;
 		} else if (neighbourLabels) {
 			// Text scaling is taken from the config here; a per-request "textScale" does not reach the labels.
-			createDatabaseRenderers(new MapDataStoreLabelStore(multiMapDataStore, renderThemeFuture, 1.0f,
-					displayModel, mapsforgeHandler.getGraphicFactory()));
+			createDatabaseRenderers(new NeighbourLabelStore(multiMapDataStore, renderThemeFuture, 1.0f,
+					displayModel, mapsforgeHandler.getGraphicFactory()), renderThemeFuture);
 		}
 		return taskEnabled;
 }
@@ -510,12 +520,14 @@ public class MapsforgeTaskHandler {
 			}
 			if (hillsRenderConfig != null && enable_hs) engine = "hs";
 
-			RendererJob job = new RendererJob(tile, multiMapDataStore, renderThemeFuture, displayModel,
+			Rendering current = rendering;
+			RenderThemeFuture theme = current.labelTheme != null ? current.labelTheme : renderThemeFuture;
+			RendererJob job = new RendererJob(tile, multiMapDataStore, theme, displayModel,
 				requestedTextScale, requestedTransparent, false);
 
 //Synchronizing render jobs has no visible effect -> disabled
 //				synchronized (this) {
-				tileBitmap = databaseRenderer.get(engine).executeJob(job);
+				tileBitmap = current.renderers.get(engine).executeJob(job);
 				if (!hillShadingOverlay) tileCache.put(job, null);
 //				}
 		}
