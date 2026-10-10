@@ -57,6 +57,7 @@ public abstract class PropertiesParser {
 
 	// MapsforgeTaskConfig.appendWorldMap
 	protected final static boolean 	DEFAULT_APPENDWORLDMAP = false;
+	protected final static boolean 	DEFAULT_NEIGHBOURLABELS = false;
 	// MapsforgeTaskConfig.gammaValue
 	protected final static double 	DEFAULT_GAMMA = 1.;
 	// MapsforgeTaskConfig.blackValue

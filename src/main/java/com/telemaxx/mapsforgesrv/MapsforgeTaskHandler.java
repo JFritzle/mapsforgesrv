@@ -40,6 +40,7 @@ import org.mapsforge.map.layer.hills.ShadingAlgorithm;
 import org.mapsforge.map.layer.hills.SimpleClasyHillShading;
 import org.mapsforge.map.layer.hills.SimpleShadingAlgorithm;
 import org.mapsforge.map.layer.hills.StandardClasyHillShading;
+import org.mapsforge.map.layer.labels.LabelStore;
 import org.mapsforge.map.layer.labels.TileBasedLabelStore;
 import org.mapsforge.map.layer.renderer.DatabaseRenderer;
 import org.mapsforge.map.layer.renderer.RendererJob;
@@ -84,7 +85,19 @@ public class MapsforgeTaskHandler {
 	private RenderThemeFuture renderThemeFuture;
 	private int[] colorLookupTable = null;
 	private String taskName;
-	private Map<String, DatabaseRenderer> databaseRenderer = null;
+	private volatile Rendering rendering = null;
+	private boolean neighbourLabels = false;
+
+	// The renderers and, with neighbour labels, the render theme their label store was built for.
+	// They are replaced together, so a request never pairs one theme with another theme's labels.
+	private static final class Rendering {
+		final Map<String, DatabaseRenderer> renderers;
+		final RenderThemeFuture labelTheme; // null: the request uses the current theme
+		Rendering(Map<String, DatabaseRenderer> renderers, RenderThemeFuture labelTheme) {
+			this.renderers = renderers;
+			this.labelTheme = labelTheme;
+		}
+	}
 
 	private MapsforgeHandler mapsforgeHandler;
 	private MapsforgeConfig mapsforgeConfig;
@@ -239,14 +252,27 @@ public class MapsforgeTaskHandler {
 			hillsRenderConfig.indexOnThread();
 		}
 
-		databaseRenderer = new HashMap<String, DatabaseRenderer>();
-		databaseRenderer.put("std", new DatabaseRenderer(multiMapDataStore, mapsforgeHandler.getGraphicFactory(), tileCache,
-				labelStore, renderLabels, cacheLabels, null));
-		if (hillsRenderConfig != null)
-			databaseRenderer.put("hs", new DatabaseRenderer(multiMapDataStore, mapsforgeHandler.getGraphicFactory(), tileCache,
-					labelStore, renderLabels, cacheLabels, hillsRenderConfig));
+		// Neighbour labels: each tile reads the labels of its 3x3 neighbourhood from the map data and
+		// places them by a fixed rule, so adjacent tiles agree on every label crossing their border no
+		// matter which process renders them or in what order. The tile-based label store only knows
+		// neighbours this process has already rendered, so with several server processes (or any
+		// request order) a label can be drawn on one side of a tile border and missing on the other.
+		// The label store needs the render theme, so in this mode the renderers are created once the
+		// theme is ready (updateRenderThemeFuture).
+		neighbourLabels = mapsforgeTaskConfig.getNeighbourLabels() && !hillShadingOverlay;
+		if (!neighbourLabels) createDatabaseRenderers(labelStore, null);
 
 		updateRenderThemeFuture(false);
+	}
+
+	private void createDatabaseRenderers(LabelStore store, RenderThemeFuture labelTheme) {
+		Map<String, DatabaseRenderer> renderers = new HashMap<String, DatabaseRenderer>();
+		renderers.put("std", new DatabaseRenderer(multiMapDataStore, mapsforgeHandler.getGraphicFactory(), tileCache,
+				store, renderLabels, cacheLabels, null));
+		if (hillsRenderConfig != null)
+			renderers.put("hs", new DatabaseRenderer(multiMapDataStore, mapsforgeHandler.getGraphicFactory(), tileCache,
+					store, renderLabels, cacheLabels, hillsRenderConfig));
+		rendering = new Rendering(renderers, labelTheme);
 	}
 
 	protected XmlRenderThemeMenuCallback menuCallBack = new XmlRenderThemeMenuCallback() {
@@ -413,6 +439,12 @@ public class MapsforgeTaskHandler {
 		if (!taskEnabled) {
 			renderThemeFuture.cancel(true);	// Thread cancelled due to error
 			renderThemeFuture = null;
+		} else if (neighbourLabels) {
+			// Text scaling is taken from the config here; a per-request "textScale" does not reach the labels.
+			// The theme is read once, so the label store and the snapshot cannot get two different ones.
+			RenderThemeFuture theme = renderThemeFuture;
+			createDatabaseRenderers(new NeighbourLabelStore(multiMapDataStore, theme, 1.0f,
+					displayModel, mapsforgeHandler.getGraphicFactory()), theme);
 		}
 		return taskEnabled;
 }
@@ -490,12 +522,14 @@ public class MapsforgeTaskHandler {
 			}
 			if (hillsRenderConfig != null && enable_hs) engine = "hs";
 
-			RendererJob job = new RendererJob(tile, multiMapDataStore, renderThemeFuture, displayModel,
+			Rendering current = rendering;
+			RenderThemeFuture theme = current.labelTheme != null ? current.labelTheme : renderThemeFuture;
+			RendererJob job = new RendererJob(tile, multiMapDataStore, theme, displayModel,
 				requestedTextScale, requestedTransparent, false);
 
 //Synchronizing render jobs has no visible effect -> disabled
 //				synchronized (this) {
-				tileBitmap = databaseRenderer.get(engine).executeJob(job);
+				tileBitmap = current.renderers.get(engine).executeJob(job);
 				if (!hillShadingOverlay) tileCache.put(job, null);
 //				}
 		}
