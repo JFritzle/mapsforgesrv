@@ -1,0 +1,374 @@
+package com.telemaxx.mapsforgesrv;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FilenameFilter;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.zip.ZipInputStream;
+
+import org.mapsforge.map.rendertheme.XmlRenderTheme;
+import org.mapsforge.map.rendertheme.ZipXmlThemeResourceProvider;
+import org.mapsforge.map.rendertheme.internal.MapsforgeThemes;
+
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public class MapsforgeTaskConfig extends PropertiesParser {
+
+	private List<File> mapFiles = null;
+	private boolean appendWorldMap;
+	private String preferredLanguage = null;
+	private File demFolder = null;
+	private File themeFile = null;
+	private String taskName = null;
+	private List<String> themeFileOverlays = null;
+	private String themeFileStyle = null;
+	private float deviceScale;
+	private float userScale;
+	private float textScale;
+	private float symbolScale;
+	private float lineScale;
+	private float tileScale;
+	protected double[] hillShadingArguments;
+	protected String hillShadingAlgorithm = null;
+	protected String hillShadingAlgorithmName = null;
+	protected double hillShadingMagnitude;
+	protected Integer hillShadingZoomMin = null;
+	protected Integer hillShadingZoomMax = null;
+	private int blackValue;
+	private double gammaValue;
+	private boolean neighborLabels;
+	private String checkSum = null;
+
+	public final static Pattern zipFilePattern = Pattern.compile("(.+\\.zip)((\\(.+\\.xml\\))?)");
+
+	private final static Logger logger = LoggerFactory.getLogger(MapsforgeTaskConfig.class);
+
+	public MapsforgeTaskConfig(String taskName, File taskFile) throws Exception {
+		this.taskName = taskName;
+		checkSum = readConfig(taskFile);
+		initConfig();
+	}
+
+	private void parseThemeFile() throws Exception {
+		String configValue = "themefile";
+		String configString = retrieveConfigValue(configValue);
+		String msgHeader = "Theme";
+
+		if (configString == null) {
+			themeFile = new File("OSMARENDER");
+			logger.info(parsePadMsg(msgHeader + " " + FILE) + ": default [OSMARENDER]");
+			return;
+		}
+
+		configString = configString.trim();
+
+		List<String> internalRenderThemes = new ArrayList<String>();
+		for (XmlRenderTheme enumItem : new ArrayList<XmlRenderTheme>(EnumSet.allOf(MapsforgeThemes.class))) {
+			internalRenderThemes.add(enumItem.toString());
+		};
+
+		if (internalRenderThemes.contains(configString)) {
+			themeFile = new File(configString);
+			logger.info(parsePadMsg(msgHeader + " " + FILE) + ": defined [" + configString + "]");
+			return;
+		}
+
+		Matcher	zipFileMatcher = zipFilePattern.matcher(configString);
+		if (!zipFileMatcher.matches()) {
+			themeFile = parseFile(configValue, FILE, false, msgHeader, null);
+			return;
+		}
+
+		msgHeader = parsePadMsg(msgHeader +=  " " + FILE);
+		String file = zipFileMatcher.group(1);
+		String theme = zipFileMatcher.group(2);
+		if (theme != "") theme = theme.substring(1, theme.length()-1);
+
+		File zipFileName = new File(file);
+		file = zipFileName.getPath();
+		if (!zipFileName.isFile()) {
+			parseError(msgHeader, "'" + file + "' is not a file");
+			return;
+		}
+
+		InputStream inputStream = new FileInputStream(zipFileName);
+		ZipInputStream zipInputStream = new ZipInputStream(inputStream);
+		ZipXmlThemeResourceProvider provider = new ZipXmlThemeResourceProvider(zipInputStream);
+		List<String> themes = provider.getXmlThemes();
+		zipInputStream.close();
+		inputStream.close();
+
+		if (themes.size() == 0) {
+			parseError(msgHeader, "'" + file + "' has no themes");
+			return;
+		} else if (themes.size() == 1) {
+			if (theme == "") {
+				theme = themes.get(0);
+				configString += "(" + theme + ")";
+			}
+		}
+		if (theme == "") {
+			parseError(msgHeader, "'" + file + "' has multiple themes " + themes);
+			return;
+		} else if (!themes.contains(theme)) {
+			parseError(msgHeader, "'" + file + "' has no theme '" + theme + "'");
+			return;
+		}
+
+		themeFile = new File(configString);
+		logger.info(msgHeader + ": defined [" + themeFile.getPath() + "]");
+	}
+
+	private void parseThemeOverlays() throws Exception {
+		String msgHeader = parsePadMsg("Theme overlay(s)");
+		String optionValue = retrieveConfigValue("overlays");
+		if (optionValue != null)
+			themeFileOverlays = Arrays.asList(StringUtils.stripAll(optionValue.trim().split(",")));
+		if (themeFileOverlays != null) {
+			logger.info(msgHeader + ": defined [{" + String.join(",", themeFileOverlays) + "}]");
+		} else {
+			logger.info(msgHeader + ": default [undefined]");
+		}
+	}
+
+	private void parseMapFiles() throws Exception {
+		mapFiles = new ArrayList<File>();
+		String msgHeader = parsePadMsg("Map file(s)");
+		String mapFilePathsString = retrieveConfigValue("mapfiles");
+		if (mapFilePathsString != null) {
+			String[] mapFilePaths = mapFilePathsString.trim().split(",");
+			List<File> mapsErr = new ArrayList<File>();
+			for (String path : mapFilePaths) {
+				File file = new File(path.trim());
+				if (file.exists()) {
+					if (file.isFile()) {
+						mapFiles.add(file);
+					} else if (file.isDirectory()) {
+						for (File mapfile : file.listFiles(new FilenameFilter() {
+							@Override
+							public boolean accept(File dir, String name) {
+								return name.endsWith(".map");
+							}
+						})) {
+							mapFiles.add(mapfile);
+						}
+					}
+				}
+			}
+			mapFiles.forEach(mapFile -> {
+				if (!mapFile.isFile())
+					mapsErr.add(mapFile);
+			});
+			String mapFilesString;
+			if (mapsErr.size() > 0) {
+				mapFiles.removeAll(mapsErr);
+				mapFilesString = mapFiles.stream().map(File::getPath).collect(Collectors.joining(","));
+				String cnxNotAuth = "{" + mapsErr.stream().map(File::getPath).collect(Collectors.joining(",")) + "} not existing";
+				if (mapFilePaths.length == 0) {
+					parseError(msgHeader, cnxNotAuth);
+				} else {
+					logger.info(msgHeader + ": defined [{" + mapFilesString + "}] - warn " + cnxNotAuth);
+				}
+			} else {
+				mapFilesString = mapFiles.stream().map(File::getPath).collect(Collectors.joining(","));
+				logger.info(msgHeader + ": defined [{" + mapFilesString + "}]");
+			}
+		} else {
+			logger.info(msgHeader + ": default [undefined]");
+		}
+		if (mapFiles.size() == 0) configProperties.setProperty("worldmap", "");
+	}
+
+	private void initConfig() throws Exception {
+		logger.info("################ TASK '" + taskName + "' PROPERTIES ################");
+		parseResetError();
+		parseMapFiles();
+		appendWorldMap = parseBoolean(DEFAULT_APPENDWORLDMAP,"worldmap", "Append built-in world map");
+		preferredLanguage = parseString(null, "language", null, "Preferred map language");
+		parseThemeFile();
+		themeFileStyle = parseString(null, "style", null, "Theme style");
+		parseThemeOverlays();
+		demFolder = parseFile("demfolder", FOLDER, true, "DEM", "undefined");
+		parseHillShading();
+		hillShadingMagnitude = (double) parseNumber(DEFAULT_HILLSHADING_MAGNITUDE, "hillshading-magnitude", 0., 4., "Hillshading magnitude",false);
+		hillShadingZoomMin = (Integer) parseNumber("Integer", "hillshading-zoom-min", 0, 20, "Hillshading minimum zoom",false);
+		hillShadingZoomMax = (Integer) parseNumber("Integer", "hillshading-zoom-max", 0, 20, "Hillshading maximum zoom",false);
+		blackValue = (int) parseNumber(DEFAULT_BLACK, "contrast-stretch", 0, 254, "Contrast stretch",false);
+		gammaValue = (double) parseNumber(DEFAULT_GAMMA, "gamma-correction", 0., null, "Gamma correction",true);
+		deviceScale = (float) parseNumber(DEFAULT_DEVICESCALE, "device-scale", 0., null, "Device scaling factor",true);
+		userScale = (float) parseNumber(DEFAULT_USERSCALE, "user-scale", 0., null, "User scaling factor",true);
+		textScale = (float) parseNumber(DEFAULT_TEXTSCALE, "text-scale", 0., null, "Text scaling factor",true);
+		symbolScale = (float) parseNumber(DEFAULT_SYMBOLSCALE, "symbol-scale", 0., null, "Symbol scaling factor",true);
+		lineScale = (float) parseNumber(DEFAULT_LINESCALE, "line-scale", 0., null, "Line scaling factor",true);
+		tileScale = (float) parseNumber(DEFAULT_TILESCALE, "tile-scale", 0., null, "Tile scaling factor",true);
+		neighborLabels = parseBoolean(DEFAULT_NEIGHBORLABELS, "neighbor-labels", "Labels from neighbor tiles");
+		if (parseGetError()) {
+			logger.error("Properties parsing error(s) - task '" + taskName + "' disabled");
+			checkSum = null;
+		}
+	}
+
+	private void parseHillShading() throws Exception {
+		String msgHeader = parsePadMsg("Hillshading algorithm");
+		hillShadingArguments = null;
+		String hillShadingOption = retrieveConfigValue("hillshading-algorithm");
+		if (hillShadingOption != null) {
+			hillShadingOption = hillShadingOption.trim();
+			Pattern P = Pattern.compile("(simple)(?:\\((-?\\d+\\.?\\d*|-?\\d*\\.?\\d+),(\\d+\\.?\\d*|\\d*\\.?\\d+)\\))?|(diffuselight)(?:\\((\\d+\\.?\\d*|\\d*\\.?\\d+)\\))?|(hiresasy|stdasy|simplasy|adaptasy)(?:\\((\\d+\\.?\\d*|\\d*\\.?\\d+),(\\d+\\.?\\d*|\\d*\\.?\\d+),(\\d+\\.?\\d*|\\d*\\.?\\d+),(\\d+),(\\d+),(true|false)\\))?");
+			Matcher m = P.matcher(hillShadingOption);
+			if (m.matches()) {
+				if (m.group(1) != null) {
+					hillShadingAlgorithm = new String(m.group(1)); // ShadingAlgorithm = simple
+					hillShadingArguments = new double[2];
+					if (m.group(2) != null) {
+						hillShadingArguments[0] = Double.parseDouble(m.group(2));
+						hillShadingArguments[1] = Double.parseDouble(m.group(3));
+					} else { // default values
+						hillShadingArguments[0] = DEFAULT_HILLSHADING_SIMPLE[0];
+						hillShadingArguments[1] = DEFAULT_HILLSHADING_SIMPLE[1];
+					}
+					hillShadingAlgorithmName = hillShadingAlgorithm + "(linearity: " + hillShadingArguments[0] + ", scale: " + hillShadingArguments[1] + ")";
+				} else if (m.group(4) != null) {
+					hillShadingAlgorithm = new String(m.group(4)); // ShadingAlgorithm = diffuselight
+					hillShadingArguments = new double[1];
+					if (m.group(5) != null) {
+						hillShadingArguments[0] = Double.parseDouble(m.group(5));
+					} else { // default value
+						hillShadingArguments[0] = DEFAULT_HILLSHADING_DIFFUSELIGHT;
+					}
+					hillShadingAlgorithmName = hillShadingAlgorithm + "(heightAngle: " + (int)hillShadingArguments[0] + ")";
+				} else if (m.group(6) != null) {
+					hillShadingAlgorithm = new String(m.group(6)); // ShadingAlgorithm = stdasy | simplasy | hiresasy | adaptasy
+					hillShadingArguments = new double[6];
+					if (m.group(7) != null) {
+						hillShadingArguments[0] = Double.parseDouble(m.group(7));
+						hillShadingArguments[1] = Double.parseDouble(m.group(8));
+						hillShadingArguments[2] = Double.parseDouble(m.group(9));
+						hillShadingArguments[3] = Integer.parseInt(m.group(10));
+						hillShadingArguments[4] = Integer.parseInt(m.group(11));
+						hillShadingArguments[5] = m.group(12).equals("true") ? 1 : 0;
+					} else { // default value
+						hillShadingArguments[0] = DEFAULT_HILLSHADING_CLASY[0];
+						hillShadingArguments[1] = DEFAULT_HILLSHADING_CLASY[1];
+						hillShadingArguments[2] = DEFAULT_HILLSHADING_CLASY[2];
+						hillShadingArguments[3] = DEFAULT_HILLSHADING_CLASY[3];
+						hillShadingArguments[4] = DEFAULT_HILLSHADING_CLASY[4];
+						hillShadingArguments[5] = DEFAULT_HILLSHADING_CLASY[5];
+					}
+					hillShadingAlgorithmName = hillShadingAlgorithm + "(asymmetryFactor: " + hillShadingArguments[0] +
+							", minSlope: " + (int)hillShadingArguments[1] +
+							", maxSlope: " + (int)hillShadingArguments[2] +
+							", readingThreadsCount: " + (int)hillShadingArguments[3] +
+							", computingThreadsCount: " + (int)hillShadingArguments[4] +
+							", preprocess: " + (hillShadingArguments[5] == 1 ? "true" : "false") +
+							")";
+				} else {
+					parseError(msgHeader, "'" + hillShadingOption + "' invalid");
+				}
+				logger.info(msgHeader + ": defined [" + hillShadingAlgorithmName + "]");	
+			} else {
+				parseError(msgHeader, "'" + hillShadingOption + "' undefined");
+			}
+		} else {
+			logger.info(msgHeader + ": default [undefined]");
+		}
+	}
+
+	public List<File> getMapFiles() {
+		return this.mapFiles;
+	}
+
+	public String getPreferredLanguage() {
+		return this.preferredLanguage;
+	}
+
+	public boolean getAppendWorldMap() {
+		return this.appendWorldMap;
+	}
+
+	public File getDemFolder() {
+		return this.demFolder;
+	}
+
+	public double getHillShadingMagnitude() {
+		return this.hillShadingMagnitude;
+	}
+
+	public String getHillShadingAlgorithm() {
+		return this.hillShadingAlgorithm;
+	}
+
+	public double[] getHillShadingArguments() {
+		return this.hillShadingArguments;
+	}
+
+	public Integer getHillShadingZoomMin() {
+		return this.hillShadingZoomMin;
+	}
+
+	public Integer getHillShadingZoomMax() {
+		return this.hillShadingZoomMax;
+	}
+
+	public String getThemeFileStyle() {
+		return this.themeFileStyle;
+	}
+
+	public List<String> getThemeFileOverlays() {
+		return this.themeFileOverlays;
+	}
+
+	public File getThemeFile() {
+		return this.themeFile;
+	}
+
+	public float getDeviceScale() {
+		return this.deviceScale;
+	}
+
+	public float getUserScale() {
+		return this.userScale;
+	}
+
+	public float getTextScale() {
+		return this.textScale;
+	}
+
+	public float getSymbolScale() {
+		return this.symbolScale;
+	}
+
+	public float getLineScale() {
+		return this.lineScale;
+	}
+
+	public int getBlackValue() {
+		return this.blackValue;
+	}
+
+	public double getGammaValue() {
+		return this.gammaValue;
+	}
+
+	public float getTileScale() {
+		return this.tileScale;
+	}
+
+	public boolean getNeighborLabels() {
+		return this.neighborLabels;
+	}
+
+	public String getCheckSum() {
+		return this.checkSum;
+	}
+
+}
