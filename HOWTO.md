@@ -22,8 +22,8 @@
     - To resolve all Mapsforge server build dependencies and access Mapsforge JAR files created by Gradle task `publishToMavenLocal`,   
   line `def mapsforgeVersion = "master-SNAPSHOT"` in Mapsforge server's file _build.gradle_  
   **must** be made active, i.e. uncommented. 
-    - To resolve all Mapsforge server build dependencies and access Mapsforge JAR files created by Gradle task `publishToMavenLocal`,   
-  by line `def mapsforgeVersion = "0.31.0"` in Mapsforge server's file _build.gradle_  
+    - To resolve all Mapsforge server build dependencies and access Mapsforge JAR files created by Gradle task `publishToMavenLocal`   
+  by line `def mapsforgeVersion = "0.31.0"` in Mapsforge server's file _build.gradle_,  
   line `version = 'master-SNAPSHOT'` in Mapsforge's file _build.gradle_ **must** be replaced by `version = '0.31.0'` **before** running Gradle task `publishToMavenLocal`.
  
 
